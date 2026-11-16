@@ -1,0 +1,551 @@
+ZDROJOVÝ AUDIT · 16. 11. 2026
+
+Blesková Faktúra
+Pred produkciou treba opraviť základné toky.
+36 nálezov: 3 kritické · 16 vysoké · 13 stredné · 4 nízke
+
+Analyzovaný bol dodaný archív blesková-faktúra.zip. Obsahuje 18 Kotlin súborov vrátane4 testových, 0 Dart súborov: ide o Kotlin + Jetpack Compose + Room + Firebase + priamy Mistral REST klient, nie Flutter. Zdroj nebol zmenený. Predchádzajúce tvrdenia generátora nie sú dôkazom funkčnosti.
+
+Vydanie neodporúčam. Kľúč by po konfigurácii opustil server, nákupy sú simulované, účtovné hodnoty sa môžu meniť pri uložení a cloudový restore chýba. ZIP má iné applicationId než balík sk.bizagent.bleskovafaktura, ktorý sme predtým videli v Play Console. Týmto auditom netvrdíme, že existujúci AAB obsahuje rovnaký kód.
+
+Rozsah a limity overenia
+Preverené zdroje všetkých produkčných Kotlin modulov, obrazoviek, Gradle konfigurácie, manifest, testy, XML zdroje a inventár archívu.
+11 XML súborov sa úspešne parsovalo. V archíve sa nenašiel reálny .env/API kľúč ani podpisový keystore; prítomný je placeholder.
+Príkaz ./gradlew :app:testDebugUnitTest :app:lintRelease :app:bundleRelease skončil127, pretože wrapper neexistuje. Gradle, Android SDK ani Kotlin kompilátor nie sú v auditnom prostredí dostupné. Kompilácia, lint, existujúce testy a APK/device flow neboli vykonané.
+Šesť offline reprodukcií ilustruje chyby pomocou zdrojových výrazov a SQLite. Nie sú to testy reálnej Android aplikácie. Výsledky a spustiteľný audit_checks.py sú v auditnom balíku.
+Nebolo volané platené Mistral API, menený Firebase, účet Google Play ani zverejnená nová zostava. Neboli overené živé Firestore Rules, AppCheck enforcement, certifikát podpisu ani nastavenia OAuth.
+Najskôr opraviť
+Potvrdiť kanonický balík a podpis, obnoviť reprodukovateľný build a testy.
+Oddeliť demo a produkciu, vytvoriť backend pre AI a odstrániť citlivé logovanie.
+Dokončiť skutočné prihlásenie, vlastníctvo dát a obojsmerný cloud sync.
+Opraviť peňažný model, validáciu, splatnosti a archiváciu originálov.
+Implementovať serverové kredity a skutočný Billing alebo platené UI v MVP vypnúť.
+Až potom release smoke test, pravdivé screenshoty/popisy, Privacy/Data safety, vymazanie účtu a uzavreté testovanie.
+Všetky nálezy podľa priority
+ID	Priorita	Nález	Miesto
+BF-01	KRITICKÉ	Mistral API kľúč sa zabuduje do distribuovaného klienta	app/src/main/java/com/example/data/MistralService.kt:122
+BF-02	KRITICKÉ	HTTP BODY logger vypisuje kľúč aj obsah dokladov	app/src/main/java/com/example/data/MistralService.kt:97
+BF-03	KRITICKÉ	Nákupy a Premium sú simulované a ovládané klientom	app/src/main/java/com/example/ui/InvoiceViewModel.kt:156
+BF-04	VYSOKÉ	ZIP má iné applicationId než rozpracovaný záznam v Play Console	app/build.gradle.kts:16
+BF-05	VYSOKÉ	Kamera môže na čistej inštalácii vyvolať SecurityException	app/src/main/java/com/example/ui/screens/ScanScreen.kt:93
+BF-06	VYSOKÉ	Cloudová záloha nemá načítanie dokladov do nového zariadenia	app/src/main/java/com/example/data/InvoiceRepository.kt:127
+BF-07	VYSOKÉ	Novému cloud používateľovi sa nevytvorí dokument štatistík	app/src/main/java/com/example/data/InvoiceRepository.kt:205
+BF-08	VYSOKÉ	Rozbehnutý sken nie je viazaný na pôvodného používateľa	app/src/main/java/com/example/ui/InvoiceViewModel.kt:123
+BF-09	VYSOKÉ	Kredity sa menia neatomicky a sken nemá ochranu proti súbehu	app/src/main/java/com/example/data/InvoiceRepository.kt:267
+BF-10	VYSOKÉ	Po uložení zostáva Success a umožní opakovane uložiť ten istý sken	app/src/main/java/com/example/ui/screens/ScanScreen.kt:583
+BF-11	VYSOKÉ	Uloženie zahodí extrahovanú DPH a prepíše ju jednou sadzbou	app/src/main/java/com/example/ui/screens/ScanScreen.kt:913
+BF-12	VYSOKÉ	Neplatná suma sa potichu nahradí pôvodnou; chýba doménová validácia	app/src/main/java/com/example/ui/screens/ScanScreen.kt:913
+BF-13	VYSOKÉ	Originál dokladu sa po potvrdení nearchivuje	app/src/main/java/com/example/ui/screens/ScanScreen.kt:918
+BF-14	VYSOKÉ	Galéria dekóduje plný obrázok na UI vlákne bez limitu	app/src/main/java/com/example/ui/screens/ScanScreen.kt:75
+BF-15	VYSOKÉ	Chýbajúca Firebase konfigurácia sa v release tvári ako úspešné demo prihlásenie	app/src/main/java/com/example/ui/screens/LoginScreen.kt:188
+BF-16	VYSOKÉ	AI JSON bez údajov sa považuje za úspešný doklad	app/src/main/java/com/example/data/MistralService.kt:69
+BF-17	VYSOKÉ	Chýba vymazanie používateľského účtu a jeho dát	app/src/main/java/com/example/data/InvoiceRepository.kt:114
+BF-18	VYSOKÉ	Testovacia sada obsahuje neexistujúcu funkciu a nesprávne očakávania	app/src/test/java/com/example/GreetingScreenshotTest.kt:22
+BF-19	VYSOKÉ	Snapshot nemá reprodukovateľný build a vstupy release podpisu	app/build.gradle.kts:26
+BF-20	STREDNÉ	Predvolený Pixtral model je podľa poskytovateľa deprecated	app/src/main/java/com/example/data/MistralService.kt:149
+BF-21	STREDNÉ	Odpočítaný kredit nemá trvalú rezerváciu ani bezpečný refund	app/src/main/java/com/example/ui/InvoiceViewModel.kt:123
+BF-22	STREDNÉ	Sieťové chyby a parsovanie sa zlievajú do null a zavádzajúcej hlášky	app/src/main/java/com/example/data/MistralService.kt:167
+BF-23	STREDNÉ	Splatnosť je vymyslená ako dátum vystavenia plus14 dní	app/src/main/java/com/example/ui/screens/DashboardScreen.kt:782
+BF-24	STREDNÉ	Graf ignoruje platné lokálne dátumy a nedá sa ním filtrovať mesačný export	app/src/main/java/com/example/ui/screens/DashboardScreen.kt:1293
+BF-25	STREDNÉ	PDF označené ako mesačné exportuje aj iné mesiace	app/src/main/java/com/example/ui/screens/DashboardScreen.kt:533
+BF-26	STREDNÉ	PDF generovanie blokuje UI a pri chybe nezatvorí zdroje	app/src/main/java/com/example/ui/PdfExporter.kt:285
+BF-27	STREDNÉ	Lokálne doklady ostávajú po odhlásení a vstupujú do štandardných záloh	app/src/main/AndroidManifest.xml:8
+BF-28	STREDNÉ	Peňažný model nemá menu a používa binárny Double	app/src/main/java/com/example/data/Model.kt:5
+BF-29	STREDNÉ	Mazanie lokálneho dokladu nemá podmienku vlastníka	app/src/main/java/com/example/data/LocalDatabase.kt:101
+BF-30	STREDNÉ	Git ignore nechráni produkčné podpisové súbory	app/build.gradle.kts:26
+BF-31	STREDNÉ	Systémové späť a rotácia nie sú riešené navigáciou/stavom	app/src/main/java/com/example/MainActivity.kt:49
+BF-32	STREDNÉ	Fotoaparát vracia iba miniatúru, nie plné rozlíšenie dokladu	app/src/main/java/com/example/ui/screens/ScanScreen.kt:93
+BF-33	NÍZKE	Kreditové percento používa kapacitu15, ktorá nezodpovedá balíkom	app/src/main/java/com/example/ui/screens/DashboardScreen.kt:450
+BF-34	NÍZKE	Tmavý režim používa svetlé tokeny a obrazovky obchádzajú tému	app/src/main/java/com/example/ui/theme/Theme.kt:14
+BF-35	NÍZKE	Release optimalizácia je vypnutá, ale nie je to dokázaný Play blocker	app/build.gradle.kts:42
+BF-36	NÍZKE	Hardcoded texty a nepoužívané závislosti zostali po prototype	app/build.gradle.kts:97
+Dôkazy a kroky opravy
+BF-01 · KRITICKÉ · Potvrdené statickou analýzou
+Mistral API kľúč sa zabuduje do distribuovaného klienta
+app/src/main/java/com/example/data/MistralService.kt:122–126
+
+BuildConfig nie je serverový trezor. Po dodaní reálneho kľúča bude dostupný z APK a používaný priamo v Authorization hlavičke (168). V ZIP je len placeholder, nie potvrdený uniknutý reálny kľúč.
+
+Ako overiť / reprodukovať: Zostaviť s testovacím kľúčom a preveriť BuildConfig/DEX. Žiadny reálny kľúč nebol extrahovaný ani použitý.
+
+Oprava: Presunúť volania Mistral na autentifikovaný backend s limitmi a serverovým účtovaním; nikdy nedistribuovať produkčný kľúč v APK.
+
+Dôkaz zo zdroja
+BF-02 · KRITICKÉ · Potvrdené statickou analýzou
+HTTP BODY logger vypisuje kľúč aj obsah dokladov
+app/src/main/java/com/example/data/MistralService.kt:97–104
+
+Logger je zapnutý bez BuildConfig.DEBUG a bez redakcie Authorization. Loguje Base64 fotografiu, prompt aj AI odpoveď; po konfigurácii aj nosný API kľúč.
+
+Ako overiť / reprodukovať: Odoslať výhradne syntetický obrázok s testovacím tokenom a prezrieť logcat. Podmienka loggera je v zdroji jednoznačná; zariadenie nebolo spustené.
+
+Oprava: V release odstrániť BODY logging; v debug redigovať hlavičky aj citlivé telá.
+
+Dôkaz zo zdroja
+BF-03 · KRITICKÉ · Potvrdené statickou analýzou
+Nákupy a Premium sú simulované a ovládané klientom
+app/src/main/java/com/example/ui/InvoiceViewModel.kt:156–170
+
+buyCreditPack ignoruje cenu a priamo zavolá addCredits; subscribePremium nastavuje lokálny/Firestore boolean. UI zobrazuje Nákup úspešný bez Play Billing. Ak backend dovolí tieto zápisy, klient si sám mení platené nároky; pri reštriktívnych pravidlách sa cloud zápisy nepodaria.
+
+Ako overiť / reprodukovať: Kliknúť na balík skenov/Premium: po delay v PricingScreen 228–235 a 273–279 sa pripíše nárok bez platobnej autorizácie.
+
+Oprava: Oddeliť demo variant; implementovať Play Billing, serverové overovanie purchase tokenov, idempotenciu a serverové entitlementy.
+
+Dôkaz zo zdroja
+BF-04 · VYSOKÉ · Potvrdené statickou analýzou
+ZIP má iné applicationId než rozpracovaný záznam v Play Console
+app/build.gradle.kts:16–21
+
+ZIP používa com.aistudio.bleskovafaktura.hzrtpq; v predchádzajúcej kontrole konzoly bolo sk.bizagent.bleskovafaktura. Z tohto ZIP nemožno bez zosúladenia vytvoriť aktualizáciu daného balíka. versionCode 1 je tiež už v pôvodnej konzole použitý.
+
+Ako overiť / reprodukovať: Porovnať applicationId, certifikát upload podpisu a versionCode s existujúcim záznamom. Toto je porovnanie s predchádzajúcim pozorovaním konzoly, nie analýza jej AAB.
+
+Oprava: Potvrdiť kanonický balík; pre existujúci záznam použiť jeho ID a upload podpis, vyšší versionCode a príslušnú Firebase konfiguráciu.
+
+Dôkaz zo zdroja
+BF-05 · VYSOKÉ · Potvrdené statickou analýzou
+Kamera môže na čistej inštalácii vyvolať SecurityException
+app/src/main/java/com/example/ui/screens/ScanScreen.kt:93–110
+
+Manifest riadok 6 deklaruje CAMERA, ale nikde nie je RequestPermission/checkSelfPermission; launch nie je chránený try/catch. Pri deklarovanom, neudelenom CAMERA oprávnení systémový capture intent vyvoláva SecurityException.
+
+Ako overiť / reprodukovať: Na zariadení s čistou inštaláciou bez udeleného CAMERA kliknúť na FAB. Podmienky zlyhania potvrdzuje oficiálna Android dokumentácia.
+
+Oprava: Pri systémovom capture intente odstrániť zbytočnú deklaráciu CAMERA alebo správne implementovať runtime permission flow; ošetriť nedostupný fotoaparát.
+
+Dôkaz zo zdroja
+BF-06 · VYSOKÉ · Potvrdené statickou analýzou
+Cloudová záloha nemá načítanie dokladov do nového zariadenia
+app/src/main/java/com/example/data/InvoiceRepository.kt:127–142
+
+Oba režimy čítajú iba Room. Firestore invoice collection sa nikde nečíta a nie je tu snapshot listener, pull ani merge do Room. Na novom zariadení sa cloudové doklady nezobrazia.
+
+Ako overiť / reprodukovať: V zariadení A uložiť doklad, na čistom zariadení B prihlásiť rovnaký účet. B číta prázdny Room, aj ak Firestore obsahuje doklad.
+
+Oprava: Implementovať obojsmernú synchronizáciu s pravidlami konfliktov, outboxom a viditeľným stavom synchronizácie. Firestore SDK môže vlastné pending writes retryovať; netvrdíme opak.
+
+Dôkaz zo zdroja
+BF-07 · VYSOKÉ · Potvrdené statickou analýzou
+Novému cloud používateľovi sa nevytvorí dokument štatistík
+app/src/main/java/com/example/data/InvoiceRepository.kt:205–244
+
+Keď users/{uid} neexistuje, vytvorí sa iba Room záznam. Neskoršie update(credits/isSubscribed/aggregates) nevytvorí chýbajúci Firestore dokument a chyby sa len logujú.
+
+Ako overiť / reprodukovať: Nový Firebase účet bez Firestore users/{uid}: prihlásiť sa, pripísať alebo odpočítať kredit a preveriť dokument. V zdroji chýba jeho prvotný set/create.
+
+Oprava: Inicializovať serverový dokument idempotentne na backende; platené polia nesmie nastavovať klient.
+
+Dôkaz zo zdroja
+BF-08 · VYSOKÉ · Potvrdené statickou analýzou
+Rozbehnutý sken nie je viazaný na pôvodného používateľa
+app/src/main/java/com/example/ui/InvoiceViewModel.kt:123–151
+
+Sken odpočíta kredit aktuálnemu používateľovi, ale počas čakania možno cez horné späť prejsť na dashboard a odhlásiť sa. Repository pri refund/save znovu číta _currentUser. Výsledok/refund môže skončiť pod iným účtom.
+
+Ako overiť / reprodukovať: Účet A spustí pomalý sken → späť → odhlásiť → účet B. Dokončiť sken a uložiť/refundovať: chýba kontrola identity vlastníka požiadavky.
+
+Oprava: Zachytiť UID a operationId pri štarte, pri zmene identity operáciu zrušiť a pred každým commitom overiť vlastníka.
+
+Dôkaz zo zdroja
+BF-09 · VYSOKÉ · Potvrdené statickou analýzou
+Kredity sa menia neatomicky a sken nemá ochranu proti súbehu
+app/src/main/java/com/example/data/InvoiceRepository.kt:267–280
+
+Read-check-write nie je transakcia ani pod mutexom; scanInvoiceImage nemá guard. Dva skeny môžu prečítať posledný kredit a oba pokračovať. Rovnako môžu kolidovať refund, nákup a recalculateStats, ktoré prepisujú celý záznam.
+
+Ako overiť / reprodukovať: Dve operácie prečítajú balance=1, obe zapíšu 0. SQLite model reprodukoval dva prijaté skeny za jeden kredit.
+
+Oprava: Serverová atomická rezervácia/ledger s idempotenciou, lokálna transakcia pre cache a jeden aktívny sken na používateľa.
+
+Dôkaz zo zdroja
+BF-10 · VYSOKÉ · Potvrdené statickou analýzou
+Po uložení zostáva Success a umožní opakovane uložiť ten istý sken
+app/src/main/java/com/example/ui/screens/ScanScreen.kt:583–592
+
+onConfirm naviguje späť, ale nevyčistí scanState. Pri návrate sa zobrazí starý formulár. Každé potvrdenie vytvára nový Invoice s novým UUID.
+
+Ako overiť / reprodukovať: Sken → Potvrdiť a uložiť → znovu otvoriť skener → znovu potvrdiť. Nevzniká nový scan ani odpočet kreditu, ale nový doklad.
+
+Oprava: Použiť operáciu uloženia s pevným ID, blokovať dvojklik a resetovať výsledok až po potvrdenom úspechu úložiska.
+
+Dôkaz zo zdroja
+BF-11 · VYSOKÉ · Potvrdené statickou analýzou
+Uloženie zahodí extrahovanú DPH a prepíše ju jednou sadzbou
+app/src/main/java/com/example/ui/screens/ScanScreen.kt:913–925
+
+extracted.vatAmount sa neukladá. Formulár vždy počíta celkovú DPH z jednej sadzby; zmiešané sadzby dokladu sú nesprávne. Detail navyše zachová starú ne-prázdnu DPH pri zmene sumy (Dashboard 1250–1252).
+
+Ako overiť / reprodukovať: Syntetický doklad: 123 pri 23% a 110 pri 10%, skutočná DPH 28. Formulár pri celku 233 a sadzbe 23 uloží 43,57. Detail: 120/20%/DPH20 → zmeniť celok na240 → DPH ostane20 namiesto40.
+
+Oprava: Reprezentovať rozpis sadzieb a explicitnú DPH; validovať súčty a zmeny nikdy ticho neprepočítavať bez pravidiel.
+
+Dôkaz zo zdroja
+BF-12 · VYSOKÉ · Potvrdené statickou analýzou
+Neplatná suma sa potichu nahradí pôvodnou; chýba doménová validácia
+app/src/main/java/com/example/ui/screens/ScanScreen.kt:913–928
+
+toDoubleOrNull fallback skryje chybný vstup vrátane bežnej desatinnej čiarky. Nie je kontrola finite hodnôt, záporných/nekonzistentných súm, názvu ani dátumu; Double pripúšťa NaN/Infinity a vatRate=-100 vedie k neplatnému deleniu.
+
+Ako overiť / reprodukovať: Zadať 123,45 alebo text do sumy: uloží sa pôvodná hodnota. Zadať neplatný dátum alebo prázdneho dodávateľa: tlačidlo ostáva aktívne. Rovnaký fallback má detail.
+
+Oprava: Slovenský parser peňažných hodnôt, centy/BigDecimal, viditeľné chyby a blokovanie potvrdenia pri neplatných údajoch.
+
+Dôkaz zo zdroja
+BF-13 · VYSOKÉ · Potvrdené statickou analýzou
+Originál dokladu sa po potvrdení nearchivuje
+app/src/main/java/com/example/ui/screens/ScanScreen.kt:918–929
+
+Bitmap/URI sa nikdy neukladá do súboru ani Storage a Invoice vzniká bez imageUrl (default null). Po opustení procesu ostávajú len polia; nejde o archiváciu fotografie účtenky.
+
+Ako overiť / reprodukovať: Importovať obrázok → uložiť → reštartovať aplikáciu. Záznam nemá uloženú prílohu ani trvalý odkaz na pôvodný obrázok.
+
+Oprava: Bezpečne uložiť originál s vlastníkmi a retenčnými pravidlami, uložiť prílohu a jej stav spolu s dokladom.
+
+Dôkaz zo zdroja
+BF-14 · VYSOKÉ · Potvrdené statickou analýzou
+Galéria dekóduje plný obrázok na UI vlákne bez limitu
+app/src/main/java/com/example/ui/screens/ScanScreen.kt:75–89
+
+Deprecated getBitmap synchronne načíta celú bitmapu, bez pixelového limitu/downsamplingu. Veľká fotografia môže blokovať UI alebo vyvolať OutOfMemoryError, ktorý catch(Exception) nezachytí.
+
+Ako overiť / reprodukovať: Na slabšom zariadení zvoliť vysokorozlíšenú fotografiu; preveriť jank/heap. Ide o riziko podľa zvolenej veľkosti obrázka, nie tu zmeraný OOM.
+
+Oprava: Dekódovanie na IO/Default s limitom pixelov a EXIF orientáciou, pre AI škálovať obraz s zachovaním čitateľnosti.
+
+Dôkaz zo zdroja
+BF-15 · VYSOKÉ · Potvrdené statickou analýzou
+Chýbajúca Firebase konfigurácia sa v release tvári ako úspešné demo prihlásenie
+app/src/main/java/com/example/ui/screens/LoginScreen.kt:188–210
+
+ZIP nemá app/google-services.json, plugin používa WARN a repository má fallback. Google tlačidlo preto prejde na spoločnú demo identitu, nie na reálny účet. Ak Firebase existuje, ale client ID chýba, tiež sa použije demo.
+
+Ako overiť / reprodukovať: Zostava z tohto snapshotu bez externej Firebase konfigurácie → kliknúť Google. Kód volá signInDemoUser. Nefungovanie samotnej Firebase konfigurácie nesmie byť maskované ako login.
+
+Oprava: Samostatný demo flavor; release build fail-closed pri chýbajúcej konfigurácii. Overiť web client ID, provider a SHA certifikáty pre kanonický balík.
+
+Dôkaz zo zdroja
+BF-16 · VYSOKÉ · Potvrdené statickou analýzou
+AI JSON bez údajov sa považuje za úspešný doklad
+app/src/main/java/com/example/data/MistralService.kt:69–80
+
+Všetky polia majú defaulty a adapter.fromJson nemá následnú doménovú validáciu. JSON {} preto zodpovedá prázdnemu dodávateľovi, dátumu a sume0; ViewModel každý nenulový objekt označí Success.
+
+Ako overiť / reprodukovať: Mockovať odpoveď API s content="{}" alebo s nezmyselným dátumom/sumou. Typovo prijateľný JSON nie je platný účtovný doklad.
+
+Oprava: Štruktúrovaná schéma a povinné polia, kontrola typu obrázka, rozsahov, dátumu, meny a konzistencie; výsledok s neistotou vrátiť na manuálne overenie.
+
+Dôkaz zo zdroja
+BF-17 · VYSOKÉ · Potvrdené statickou analýzou
+Chýba vymazanie používateľského účtu a jeho dát
+app/src/main/java/com/example/data/InvoiceRepository.kt:114–123
+
+Implementovaný je iba signOut a mazanie jednotlivého dokladu. V celom ZIP nie je flow na vymazanie Firebase účtu, cloudových dát ani lokálnej histórie účtu.
+
+Ako overiť / reprodukovať: Prezrieť dostupné akcie obrazoviek a repository: účet sa nedá vymazať z aplikácie. Živý externý deletion endpoint nie je súčasťou archívu a nebol overený.
+
+Oprava: Pridať bezpečný account-deletion flow s reautentifikáciou, serverovým výmazom, lokálnou cache a verejnou žiadosťou o výmaz pre listing.
+
+Dôkaz zo zdroja
+BF-18 · VYSOKÉ · Potvrdené statickou analýzou
+Testovacia sada obsahuje neexistujúcu funkciu a nesprávne očakávania
+app/src/test/java/com/example/GreetingScreenshotTest.kt:22–26
+
+Greeting nie je nikde definované ani importované; test source preto má unresolved reference. ExampleRobolectricTest:19 očakáva My Application namiesto Blesková Faktúra; instrumented test:20 očakáva com.example namiesto applicationId.
+
+Ako overiť / reprodukovať: Spustiť testDebugUnitTest po obnovení toolchainu; najprv zlyhá kompilácia screenshot testu. Nesprávne string/package asserty sú potvrdené porovnaním zdrojov, nie vykonaným Gradle testom.
+
+Oprava: Odstrániť neaktuálne template testy alebo ich upraviť a pridať testy reálnych účtovných a synchronizačných invariantov.
+
+Dôkaz zo zdroja
+BF-19 · VYSOKÉ · Potvrdené statickou analýzou
+Snapshot nemá reprodukovateľný build a vstupy release podpisu
+app/build.gradle.kts:26–39
+
+Chýba gradlew, gradlew.bat, gradle-wrapper.properties aj jar. V ZIP nie je release ani explicitný debug keystore. Bez dodania vhodného KEYSTORE_PATH a hesiel release podpis nemožno zostaviť; neprítomnosť privátneho kľúča v ZIP je správna, nie dôvod vložiť ho do repa.
+
+Ako overiť / reprodukovať: ./gradlew :app:testDebugUnitTest :app:lintRelease :app:bundleRelease skončilo exit127: ./gradlew neexistuje. Prostredie nemá Gradle/Android SDK, takže kompilácia aplikácie vôbec nezačala.
+
+Oprava: Obnoviť oficiálny Gradle wrapper pre AGP9.1.1, SDK36.1 a JDK; použiť bezpečný externý upload kľúč zhodný s existujúcim Play záznamom.
+
+Dôkaz zo zdroja
+BF-20 · STREDNÉ · Potvrdené statickou analýzou
+Predvolený Pixtral model je podľa poskytovateľa deprecated
+app/src/main/java/com/example/data/MistralService.kt:149–164
+
+Hardcoded pixtral-12b-2409 je v oficiálnej dokumentácii označený deprecated. Deprecated nie je to isté ako dokázaný výpadok API; dostupnosť pre tento účet nebola skúšaná.
+
+Ako overiť / reprodukovať: Overené oficiálne modelové stránky a lifecycle policy 16.11.2026; žiadne volanie plateného API sa neuskutočnilo.
+
+Oprava: Model zvoliť a verzovať na serveri; otestovať aktuálnu vision/OCR náhradu na slovenských dokladoch a spracovať model-not-found osobitne.
+
+Dôkaz zo zdroja
+BF-21 · STREDNÉ · Potvrdené statickou analýzou
+Odpočítaný kredit nemá trvalú rezerváciu ani bezpečný refund
+app/src/main/java/com/example/ui/InvoiceViewModel.kt:123–151
+
+Kredit sa odpočíta pred API, refund prebehne iba v živej coroutine pri null výsledku. Zabitie procesu/neošetrená výnimka nechá odpočet bez výsledku. Predplatiteľovi sa naopak pri chybe pripíše kredit, hoci sa nič neodpočítalo.
+
+Ako overiť / reprodukovať: Po odpočte ukončiť proces. Osobitne: subscribed=true, credits5, AI null → addCredits(1) → credits6. Model reprodukoval tento vedľajší efekt.
+
+Oprava: Idempotentný ledger operácií s rezerváciou/commit/refund a obnovou po páde; refund iba skutočne odpočítanej sumy.
+
+Dôkaz zo zdroja
+BF-22 · STREDNÉ · Potvrdené statickou analýzou
+Sieťové chyby a parsovanie sa zlievajú do null a zavádzajúcej hlášky
+app/src/main/java/com/example/data/MistralService.kt:167–184
+
+401,429,404,timeout, nečitateľný obrázok aj chyba JSONu vracajú null. ViewModel radí produkčnému používateľovi meniť kľúč v Secrets paneli. Catch(Exception) zachytáva aj CancellationException namiesto propagácie.
+
+Ako overiť / reprodukovať: Mockovať 401,429,timeout a chybný JSON: všetko skončí rovnakou UI správou. Lokálna DB chyba mimo catch môže nechať Scanning/pád coroutine.
+
+Oprava: Typované výsledky a bezpečné UI hlášky, propagácia cancellation, retry/backoff iba tam kde je bezpečný, a finally pre stav/cleanup.
+
+Dôkaz zo zdroja
+BF-23 · STREDNÉ · Potvrdené statickou analýzou
+Splatnosť je vymyslená ako dátum vystavenia plus14 dní
+app/src/main/java/com/example/ui/screens/DashboardScreen.kt:782–799
+
+Dátový model nemá dueDate ani paid status. Každý doklad vrátane zaplatenej účtenky tak môže byť označený ako po splatnosti. Milisekundové delenie dní má navyše okrajové chyby pri zmene časového pásma/DST.
+
+Ako overiť / reprodukovať: Uložiť zaplatenú účtenku s dátumom spred mesiaca alebo faktúru so skutočnou splatnosťou30 dní. UI napriek tomu použije +14.
+
+Oprava: Extrahovať/editovať skutočnú splatnosť a stav úhrady; účtenky neoznačovať ako neuhradené faktúry; použiť LocalDate/ChronoUnit.
+
+Dôkaz zo zdroja
+BF-24 · STREDNÉ · Potvrdené statickou analýzou
+Graf ignoruje platné lokálne dátumy a nedá sa ním filtrovať mesačný export
+app/src/main/java/com/example/ui/screens/DashboardScreen.kt:1293–1305
+
+Graf rozpozná iba rozdelenie dátumu cez pomlčku, detail pritom prijíma aj dd.MM.yyyy/yyyy/MM/dd. Kliknutie na mesiac mení len selectedMonthIdx, nie filteredInvoices.
+
+Ako overiť / reprodukovať: Uložiť 16.11.2026: doklad je v zozname, no nie v grafe. Vybrať mesiac grafu a exportovať: výber mesiaca nefiltruje zoznam.
+
+Oprava: Jednotná canonical LocalDate hodnota a explicitný filter obdobia zdieľaný zoznamom, grafom a exportom.
+
+Dôkaz zo zdroja
+BF-25 · STREDNÉ · Potvrdené statickou analýzou
+PDF označené ako mesačné exportuje aj iné mesiace
+app/src/main/java/com/example/ui/screens/DashboardScreen.kt:533–538
+
+filteredInvoices filtruje iba dodávateľa/popisy a kategóriu (90–95). PDF a zdieľací text ho označujú ako mesačný prehľad, hoci export môže obsahovať celý archív. Obdobie v PDF je len Aktuálny výber.
+
+Ako overiť / reprodukovať: Mať doklady z januára aj februára, kliknúť február grafu a Exportovať PDF: exportovaný zoznam obsahuje oba mesiace.
+
+Oprava: Pred exportom vybrať konkrétne obdobie a uviesť ho v hlavičke; prípadne export nazvať pravdivo prehľad aktuálne filtrovaných dokladov.
+
+Dôkaz zo zdroja
+BF-26 · STREDNÉ · Potvrdené statickou analýzou
+PDF generovanie blokuje UI a pri chybe nezatvorí zdroje
+app/src/main/java/com/example/ui/PdfExporter.kt:285–298
+
+Generovanie/iterovanie/súborový zápis beží synchronne z onClick na hlavnom vlákne. PdfDocument a FileOutputStream sa zatvárajú len na úspešnej vetve, nie v use/finally; exporty sa z cache priebežne neodstraňujú.
+
+Ako overiť / reprodukovať: Exportovať veľký zoznam alebo simulovať plný disk/výnimku počas writeTo. Zmerať blokovanie UI a otvorené zdroje na zariadení.
+
+Oprava: Renderovať na worker vlákne, use/finally, mazanie neúplných súborov a politika čistenia cache; share intent spustiť na Main.
+
+Dôkaz zo zdroja
+BF-27 · STREDNÉ · Potvrdené statickou analýzou
+Lokálne doklady ostávajú po odhlásení a vstupujú do štandardných záloh
+app/src/main/AndroidManifest.xml:8–16
+
+allowBackup=true a pravidlá záloh majú len komentáre, bez vylúčenia databázy. signOut lokálnu cache nečistí a Room nie je šifrovaný na aplikačnej úrovni. Android sandbox/ochrana zariadenia tým nie sú automaticky prelomené.
+
+Ako overiť / reprodukovať: Odhlásiť sa a prezrieť databázu v autorizovanom debug prostredí; preveriť backup/restore politiku. Nie je to dôkaz verejného úniku dát.
+
+Oprava: Rozhodnúť retenčnú/backup politiku pre finančné doklady, vylúčiť citlivé cache podľa potreby a pridať lokálny výmaz pri odobratí účtu.
+
+Dôkaz zo zdroja
+BF-28 · STREDNÉ · Potvrdené statickou analýzou
+Peňažný model nemá menu a používa binárny Double
+app/src/main/java/com/example/data/Model.kt:5–18
+
+Suma/DPH je Double a mena neexistuje. UI/PDF vždy pridáva €. Pri cudzomenovom doklade sa nedá uložiť pôvodná mena a súčty sa môžu miešať bez prepočtu; model neobsahuje presné zaokrúhľovanie.
+
+Ako overiť / reprodukovať: Importovať USD/CZK doklad; údaje nemajú pole na menu. Sčítanie napr.0.1+0.2 nie je binárne presné, kým export len formátuje na2 desatinné miesta.
+
+Oprava: Použiť presné peňažné hodnoty a ISO menu, explicitné pravidlá zaokrúhlenia a žiadne sčítanie rôznych mien bez konverzie.
+
+Dôkaz zo zdroja
+BF-29 · STREDNÉ · Potvrdené statickou analýzou
+Mazanie lokálneho dokladu nemá podmienku vlastníka
+app/src/main/java/com/example/data/LocalDatabase.kt:101–105
+
+DELETE používa iba id; repository kontroluje existenciu prihláseného účtu, ale nie vlastníka lokálneho id. Bežný zoznam je filtrovaný podľa UID; samostatný vzdialený exploit tým nie je preukázaný.
+
+Ako overiť / reprodukovať: SQLite probe: v tabuľke je dokladA, DAO dotaz dostane jeho id v kontexteB a vymaže ho. Riziko pri chybnom/stale volajúcom a zmene identity.
+
+Oprava: V každej mutácii požadovať uid aj id a v transakcii overiť vlastníka.
+
+Dôkaz zo zdroja
+BF-30 · STREDNÉ · Potvrdené statickou analýzou
+Git ignore nechráni produkčné podpisové súbory
+app/build.gradle.kts:26–38
+
+Konfigurácia smeruje na my-upload-key.jks, ale koreňový .gitignore ignoruje iba debug.keystore a .env, nie *.jks ani key.properties. V ZIP sa reálny keystore nenašiel.
+
+Ako overiť / reprodukovať: Porovnať signingConfigs s .gitignore: vytvorenie predvoleného upload súboru v koreňovom repozitári ho automaticky neskryje pred git add.
+
+Oprava: Pridať pravidlá pre upload kľúče/properties a secret scanning; súkromný kľúč držať mimo zdrojového repa.
+
+Dôkaz zo zdroja
+BF-31 · STREDNÉ · Potvrdené statickou analýzou
+Systémové späť a rotácia nie sú riešené navigáciou/stavom
+app/src/main/java/com/example/MainActivity.kt:49–63
+
+Manuálna navigácia používa remember, nie rememberSaveable/NavHost; BackHandler nie je v celom zdroji. Systémové späť nemá definované vrátenie na dashboard; rotácia vráti obrazovku cez LOGIN na DASHBOARD a rozpracovaný lokálny náhľad/formulár sa stratí.
+
+Ako overiť / reprodukovať: Otvoriť skener, vybrať obrázok, otočiť zariadenie; alebo použiť systémové späť namiesto toolbaru. Potrebné potvrdiť device testom.
+
+Oprava: Navigation Compose alebo explicitný back stack a saveable stav bez bitmap v Bundle; fotky uložiť do dočasných súborov.
+
+Dôkaz zo zdroja
+BF-32 · STREDNÉ · Potvrdené statickou analýzou
+Fotoaparát vracia iba miniatúru, nie plné rozlíšenie dokladu
+app/src/main/java/com/example/ui/screens/ScanScreen.kt:93–103
+
+TakePicturePreview vracia malý bitmapový náhľad. Následné JPEG kódovanie na kvalite75 už stratené detaily neobnoví, čo znižuje spoľahlivosť čítania drobného textu a dlhých účteniek.
+
+Ako overiť / reprodukovať: Porovnať rozmery a OCR výstup rovnakého dokladu odfoteného cez náhľadový kontrakt a cez plný capture; presná veľkosť náhľadu závisí od fotoaparátu.
+
+Oprava: Použiť TakePicture s bezpečným FileProvider URI pre plný obrázok, potom kontrolovane škálovať a zachovať originál.
+
+Dôkaz zo zdroja
+BF-33 · NÍZKE · Potvrdené statickou analýzou
+Kreditové percento používa kapacitu15, ktorá nezodpovedá balíkom
+app/src/main/java/com/example/ui/screens/DashboardScreen.kt:450–465
+
+Text pri50 kreditoch zobrazí333%, progress bar sa však orezáva na100%. Počiatočný počet kreditov je10, balíky majú10/50/100.
+
+Ako overiť / reprodukovať: Pripísať50 kreditov a porovnať text s barom.
+
+Oprava: Zobrazovať absolútny zostatok alebo bar založený na skutočnom limite/predplatnom.
+
+Dôkaz zo zdroja
+BF-34 · NÍZKE · Potvrdené statickou analýzou
+Tmavý režim používa svetlé tokeny a obrazovky obchádzajú tému
+app/src/main/java/com/example/ui/theme/Theme.kt:14–30
+
+DarkColorScheme používa rovnaké BentoBg/BentoSurface ako light. Dashboard má navyše pevné svetlé pozadie a farby; systémový dark mode preto nevytvára konzistentný tmavý vzhľad.
+
+Ako overiť / reprodukovať: Zapnúť systémový dark mode a porovnať dashboard/login/pricing.
+
+Oprava: Definovať reálne dark tokeny a používať MaterialTheme konzistentne; preveriť kontrasty a zväčšené písmo.
+
+Dôkaz zo zdroja
+BF-35 · NÍZKE · Potvrdené statickou analýzou
+Release optimalizácia je vypnutá, ale nie je to dokázaný Play blocker
+app/build.gradle.kts:42–49
+
+isMinifyEnabled=false, shrinkResources nie je zapnuté; custom ProGuard obsahuje len template komentáre. Ide o optimalizačný dlh. Moshi modely už majú generateAdapter=true a KSP codegen; automatické tvrdenie o zaručenom páde Room/Moshi po R8 je nepodložené.
+
+Ako overiť / reprodukovať: Preveriť dependency consumer rules a reálny minifikovaný release po obnovení build toolchainu.
+
+Oprava: R8 zapínať až s release smoke testami a cielenými keep pravidlami, nie plošnými keep-all pravidlami.
+
+Dôkaz zo zdroja
+BF-36 · NÍZKE · Potvrdené statickou analýzou
+Hardcoded texty a nepoužívané závislosti zostali po prototype
+app/build.gradle.kts:97–113
+
+Firebase AI a AppCheck reCAPTCHA sú závislosti bez používania v zdroji; celý UI má slovenské texty priamo v kóde a strings.xml má len app_name. Nepoužíva sa tiež InvoiceDao.getAllInvoices a niekoľko importov.
+
+Ako overiť / reprodukovať: Prehľadané všetky zdrojové súbory: žiadna inicializácia AppCheck ani Firebase AI volanie. Prítomnosť knižnice neznamená aktívnu ochranu.
+
+Oprava: Odstrániť nepotrebné závislosti/importy, zaviesť resources a reálnu lint/dependency kontrolu; neprezentovať AppCheck ako zapnutý.
+
+Dôkaz zo zdroja
+Opravy tvrdení z predošlého Gemini auditu
+BuildConfig kľúč nie je bezpečný trezor. Secrets Gradle plugin chráni pred náhodným uložením hodnoty do zdrojov, nie pred jej extrakciou z aplikácie.
+Chýbajúci google-services.json tu automaticky neznamená okamžitý pád. WARN/fallback kód je prítomný; problém je tichý prechod na demo a chýbajúce skutočné prihlásenie.
+Google onClick už nie je prázdny. Používa CredentialManager, ale externá Firebase/OAuth konfigurácia chýba a nebola overená.
+targetSdk je36, applicationId nie je com.example. com.example je namespace. Skutočné applicationId v ZIP však nesedí s predtým kontrolovaným Play záznamom.
+R8=false nie je samo osebe preukázané porušenie prijímacej podmienky Play. Je to odporúčaná optimalizácia. Prázdny custom ProGuard súbor nedokazuje automatický pád všetkých knižníc: Moshi už má codegen anotácie a závislosti môžu dodávať vlastné consumer rules.
+Kamera cez systémový intent nemusí žiadať CAMERA. Práve existujúca deklarácia bez udelenia spôsobuje podmienku SecurityException.
+Cloudový sync, bezpečné platby a produkčná pripravenosť nie sú hotové. Kompilácia prototypu na cudzej platforme toto nepotvrdzuje.
+Nie je nutné zavádzať Flutter. Opravy majú pokračovať v existujúcom natívnom Kotlin projekte, pokiaľ používateľ výslovne nezvolí migráciu.
+Reprodukované príklady
+{
+  "kind": "static_inventory_and_model_reproductions",
+  "not_executed": [
+    "Android build",
+    "Kotlin compiler",
+    "device UI",
+    "Firebase",
+    "Mistral API",
+    "billing"
+  ],
+  "facts": {
+    "kotlin_files": 18,
+    "dart_files": 0,
+    "application_id": "com.aistudio.bleskovafaktura.hzrtpq",
+    "target_sdk": 36,
+    "version_code": 1,
+    "google_services_json_present": false,
+    "gradle_wrapper_present": false,
+    "key_files_in_archive": [],
+    "xml_parsed": 11,
+    "greeting_definition_present": false
+  },
+  "probes": [
+    {
+      "name": "mixed_vat_overwrite",
+      "actual": 43.57,
+      "expected": 28.0,
+      "demonstrates": "Synthetic receipt with gross 123 at 23% and gross 110 at 10%; AI vatAmount 28 is discarded by the form."
+    },
+    {
+      "name": "edit_stale_vat",
+      "actual": 20.0,
+      "expected": 40.0,
+      "demonstrates": "Detail form preserves previous nonblank vatAmount=20 after amount changes from 120 to 240."
+    },
+    {
+      "name": "subscriber_failed_scan_refund",
+      "actual": 6,
+      "expected": 5,
+      "demonstrates": "Subscriber scan deducts nothing, failed extraction unconditionally adds one credit."
+    },
+    {
+      "name": "concurrent_scans_one_credit",
+      "actual": {
+        "accepted": 2,
+        "balance": 0
+      },
+      "expected": {
+        "accepted": 1,
+        "balance": 0
+      },
+      "demonstrates": "Two scans can each read credit=1 before either writes; no transaction or mutex covers read-check-write."
+    },
+    {
+      "name": "dao_delete_without_owner",
+      "actual": 0,
+      "expected": 1,
+      "demonstrates": "Local DAO deletes by id only. If B calls delete with A id, A row is removed. Reachability depends on caller; not proof of external exploit."
+    },
+    {
+      "name": "chart_local_date_ignored",
+      "actual": false,
+      "expected": true,
+      "demonstrates": "Local DD.MM.YYYY date accepted by detail parser never enters chart year/month aggregation."
+    }
+  ]
+}
+Čo treba ešte overiť mimo ZIP
+Živé Firestore rules: izolácia UID, zákaz klientskych zápisov platených nárokov, offline retry a konflikty medzi zariadeniami.
+Reálny release podpis a certifikáty vo Firebase; dostupnosť Google Sign-In a obnova účtu.
+Dostupnosť zvoleného vision modelu na produkčnom účte a presnosť na slovenských reálnych dokladoch so súhlasom vlastníka.
+Výkonnosť a pamäť pri veľkých obrázkoch/PDF, permission denial, rotácia a ukončenie procesu.
+Skutočné nakladanie s dátami tretích strán; právne tvrdenia z dodaného sprievodcu nie sú týmto kódovým auditom automaticky potvrdené. Osobný typ účtu sám osebe neurčuje odpovede vo finančnej/štátnej deklarácii.
+Primárne zdroje
+Android: systémový fotoaparát a CAMERA
+Android: TakePicturePreview vracia malý náhľad
+Android: applicationId
+OkHttp: citlivé údaje v logoch
+Moshi: R8/ProGuard a codegen
+Android: R8 optimalizácia
+Mistral: Pixtral12B deprecated
+Mistral: lifecycle
+SHA256 pôvodného ZIP: 22bd5c614778bdb339f6c838e35e038a849637864a2d0555625892ec0302bfd8. Dôkazy sú viazané na tento snapshot; neskoršie verzie môžu mať iné riadky a správanie.

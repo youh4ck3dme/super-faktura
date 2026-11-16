@@ -1,0 +1,6 @@
+{
+  "name": "Blesková Faktúra",
+  "description": "Rýchla a inteligentná správa faktúr a výdavkov pre SZČO pomocou AI. Rýchle nahrávanie, automatické skenovanie a bezpečná archivácia.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
