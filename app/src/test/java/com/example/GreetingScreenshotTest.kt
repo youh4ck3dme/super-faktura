@@ -1,6 +1,11 @@
 package com.example
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import com.example.ui.theme.MyApplicationTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
@@ -20,9 +25,20 @@ class GreetingScreenshotTest {
   @get:Rule val composeTestRule = createComposeRule()
 
   @Test
-  fun greeting_screenshot() {
-    composeTestRule.setContent { MyApplicationTheme { Greeting("Robolectric") } }
+  fun brand_header_renders_in_theme() {
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        Surface {
+          Text(
+            text = "Blesková Faktúra",
+            style = MaterialTheme.typography.headlineMedium
+          )
+        }
+      }
+    }
 
-    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/greeting.png")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("Blesková Faktúra").assertIsDisplayed()
+    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/brand_header.png")
   }
 }

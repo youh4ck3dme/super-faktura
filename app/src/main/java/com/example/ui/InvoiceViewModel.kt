@@ -4,12 +4,15 @@ import android.app.Application
 import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.AiExtractionResult
+import com.example.data.CreditDeductionResult
 import com.example.data.ExtractedInvoiceJson
-import com.example.data.MistralService
+import com.example.data.InvoiceAiService
 import com.example.data.Invoice
 import com.example.data.InvoiceRepository
 import com.example.data.UserInfo
 import com.example.data.UserStats
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +21,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 sealed interface ScanUiState {
     object Idle : ScanUiState
@@ -123,32 +125,55 @@ class InvoiceViewModel(application: Application) : AndroidViewModel(application)
     fun scanInvoiceImage(bitmap: Bitmap) {
         viewModelScope.launch {
             _scanState.value = ScanUiState.Scanning("Bleskovo kontrolujem kredity...")
-            
-            // Try to deduct 1 credit
-            val hasCredits = repository.deductCredit()
-            if (!hasCredits) {
+
+            val deductionResult = repository.deductCredit()
+            if (deductionResult is CreditDeductionResult.InsufficientCredits) {
                 _scanState.value = ScanUiState.Error("Nemáte dostatok kreditov na skenovanie. Zakúpte si kredity alebo Blesk Premium v sekcii Predplatné.")
                 return@launch
             }
+            val shouldRefundOnFailure = deductionResult is CreditDeductionResult.Deducted
 
-            // Simulate progress messages for a dynamic, fun UX while waiting for Mistral AI
-            val job = launch {
+            val progressJob = launch {
                 for (msg in funnySlovakScannerMessages) {
                     _scanState.value = ScanUiState.Scanning(msg)
                     kotlinx.coroutines.delay(1200)
                 }
             }
 
-            // Call Mistral service
-            val extracted = MistralService.extractInvoiceData(bitmap)
-            job.cancel() // Stop generating simulated messages
-
-            if (extracted != null) {
-                _scanState.value = ScanUiState.Success(extracted, bitmap)
-            } else {
-                // If extraction fails, refund the credit!
-                repository.addCredits(1)
-                _scanState.value = ScanUiState.Error("AI analýza zlyhala. Uistite sa, že doklad je dobre čitateľný a máte správne zadaný API kľúč v Secrets paneli. Kredit bol vrátený.")
+            try {
+                when (val result = InvoiceAiService.extractInvoiceData(bitmap)) {
+                    is AiExtractionResult.Success -> {
+                        _scanState.value = ScanUiState.Success(result.data, bitmap)
+                    }
+                    is AiExtractionResult.InvalidDocument -> {
+                        if (shouldRefundOnFailure) repository.addCredits(1)
+                        val refundNote = if (shouldRefundOnFailure) " Kredit bol vrátený." else ""
+                        _scanState.value = ScanUiState.Error("${result.message}$refundNote")
+                    }
+                    is AiExtractionResult.Timeout -> {
+                        if (shouldRefundOnFailure) repository.addCredits(1)
+                        val refundNote = if (shouldRefundOnFailure) " Kredit bol vrátený." else ""
+                        _scanState.value = ScanUiState.Error("AI analýza vypršala po 60 sekundách. Skúste to prosím znova.$refundNote")
+                    }
+                    is AiExtractionResult.ServiceError -> {
+                        if (shouldRefundOnFailure) repository.addCredits(1)
+                        val refundNote = if (shouldRefundOnFailure) " Kredit bol vrátený." else ""
+                        _scanState.value = ScanUiState.Error("${result.message}$refundNote")
+                    }
+                }
+            } catch (e: CancellationException) {
+                if (shouldRefundOnFailure) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                        repository.addCredits(1)
+                    }
+                }
+                throw e
+            } catch (e: Exception) {
+                if (shouldRefundOnFailure) repository.addCredits(1)
+                val refundNote = if (shouldRefundOnFailure) " Kredit bol vrátený." else ""
+                _scanState.value = ScanUiState.Error("Neočekávaná chyba pri spracovaní dokladu: ${e.localizedMessage ?: "neznáma chyba"}.$refundNote")
+            } finally {
+                progressJob.cancel()
             }
         }
     }

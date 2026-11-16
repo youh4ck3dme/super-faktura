@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.configureAppCheck
 import com.example.ui.InvoiceViewModel
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.LoginScreen
@@ -30,7 +31,10 @@ enum class AppScreen {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
+        // Initialize Firebase App Check with launch intent before any UI or ViewModels
+        configureAppCheck(this, intent)
+
         // Enable true edge-to-edge drawing
         enableEdgeToEdge()
         

@@ -2,9 +2,13 @@ package com.example.data
 
 import android.content.Context
 import android.util.Log
+import com.example.BuildConfig
+import com.example.R
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -17,7 +21,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import java.util.UUID
 
 data class UserInfo(
     val uid: String,
@@ -26,8 +29,15 @@ data class UserInfo(
     val photoUrl: String?
 )
 
+sealed interface CreditDeductionResult {
+    data object Deducted : CreditDeductionResult
+    data object UnlimitedSubscriber : CreditDeductionResult
+    data object InsufficientCredits : CreditDeductionResult
+}
+
 class InvoiceRepository(context: Context) {
-    private val database = AppDatabase.getDatabase(context)
+    private val appContext = context.applicationContext
+    private val database = AppDatabase.getDatabase(appContext)
     private val invoiceDao = database.invoiceDao()
     private val userStatsDao = database.userStatsDao()
     private val repositoryScope = CoroutineScope(Dispatchers.IO)
@@ -36,14 +46,29 @@ class InvoiceRepository(context: Context) {
     private val _currentUser = MutableStateFlow<UserInfo?>(null)
     val currentUser: StateFlow<UserInfo?> = _currentUser.asStateFlow()
 
+    private val firestoreDb: FirebaseFirestore? by lazy {
+        try {
+            if (FirebaseApp.getApps(appContext).isEmpty()) {
+                FirebaseApp.initializeApp(appContext)
+            }
+            val databaseId = appContext.getString(R.string.firestore_database_id)
+            FirebaseFirestore.getInstance(databaseId)
+        } catch (e: Exception) {
+            Log.e("InvoiceRepository", "Firestore initialization failed: ${e.message}")
+            null
+        }
+    }
+
     // Firebase state flag
     private val isFirebaseReady: Boolean by lazy {
         try {
+            if (FirebaseApp.getApps(appContext).isEmpty()) {
+                FirebaseApp.initializeApp(appContext)
+            }
             FirebaseAuth.getInstance()
-            FirebaseFirestore.getInstance()
-            true
+            firestoreDb != null
         } catch (e: Exception) {
-            Log.w("InvoiceRepository", "Firebase SDK is not available or unconfigured. Falling back to Local Mode. Error: ${e.message}")
+            Log.e("InvoiceRepository", "Firebase SDK is not available or unconfigured: ${e.message}")
             false
         }
     }
@@ -92,6 +117,8 @@ class InvoiceRepository(context: Context) {
             initializeUserStats(userInfo.uid)
 
             Result.success(userInfo)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("InvoiceRepository", "Firebase sign-in failed", e)
             Result.failure(e)
@@ -99,10 +126,14 @@ class InvoiceRepository(context: Context) {
     }
 
     fun signInDemoUser() {
+        if (!BuildConfig.DEBUG) {
+            Log.w("InvoiceRepository", "Demo sign-in blocked in release builds.")
+            return
+        }
         val demoUser = UserInfo(
             uid = "demo_szco_2026",
-            email = "erikbabcan@gmail.com",
-            displayName = "Erik (Slovenský Živnostník)",
+            email = "demo@bleskovafaktura.local",
+            displayName = "Demo Živnostník",
             photoUrl = null
         )
         _currentUser.value = demoUser
@@ -150,15 +181,17 @@ class InvoiceRepository(context: Context) {
         invoiceDao.insertInvoice(updatedInvoice.toEntity())
 
         // Save to Firebase Firestore if ready
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
+                db.collection("users")
                     .document(user.uid)
                     .collection("invoices")
                     .document(updatedInvoice.id)
                     .set(updatedInvoice)
                     .await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error saving invoice to Firestore, cached locally", e)
             }
@@ -175,15 +208,17 @@ class InvoiceRepository(context: Context) {
         invoiceDao.deleteInvoice(id)
 
         // Delete from Firebase Firestore if ready
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
+                db.collection("users")
                     .document(user.uid)
                     .collection("invoices")
                     .document(id)
                     .delete()
                     .await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error deleting invoice from Firestore, removed locally", e)
             }
@@ -205,10 +240,10 @@ class InvoiceRepository(context: Context) {
     suspend fun initializeUserStats(userId: String) = withContext(Dispatchers.IO) {
         var localEntity = userStatsDao.getUserStats(userId)
         
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                val firestoreDoc = FirebaseFirestore.getInstance()
-                    .collection("users")
+                val firestoreDoc = db.collection("users")
                     .document(userId)
                     .get()
                     .await()
@@ -227,6 +262,8 @@ class InvoiceRepository(context: Context) {
                     userStatsDao.insertUserStats(mergedStats)
                     return@withContext
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error fetching user stats from Firestore", e)
             }
@@ -251,46 +288,50 @@ class InvoiceRepository(context: Context) {
         
         userStatsDao.insertUserStats(updatedStats.toEntity())
 
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
+                db.collection("users")
                     .document(user.uid)
                     .update("credits", updatedStats.credits)
                     .await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error updating credits in Firestore", e)
             }
         }
     }
 
-    suspend fun deductCredit(): Boolean = withContext(Dispatchers.IO) {
-        val user = _currentUser.value ?: return@withContext false
+    suspend fun deductCredit(): CreditDeductionResult = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext CreditDeductionResult.InsufficientCredits
         val currentStats = userStatsDao.getUserStats(user.uid)?.toUserStats() ?: UserStats(userId = user.uid)
         
         if (currentStats.isSubscribed) {
-            return@withContext true // Subscribed users have unlimited scans
+            return@withContext CreditDeductionResult.UnlimitedSubscriber
         }
         
         if (currentStats.credits <= 0) {
-            return@withContext false // No credits left
+            return@withContext CreditDeductionResult.InsufficientCredits
         }
 
         val updatedStats = currentStats.copy(credits = currentStats.credits - 1)
         userStatsDao.insertUserStats(updatedStats.toEntity())
 
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
+                db.collection("users")
                     .document(user.uid)
                     .update("credits", updatedStats.credits)
                     .await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error deducting credit in Firestore", e)
             }
         }
-        return@withContext true
+        return@withContext CreditDeductionResult.Deducted
     }
 
     suspend fun subscribePremium() = withContext(Dispatchers.IO) {
@@ -300,13 +341,15 @@ class InvoiceRepository(context: Context) {
         
         userStatsDao.insertUserStats(updatedStats.toEntity())
 
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
+                db.collection("users")
                     .document(user.uid)
                     .update("isSubscribed", true)
                     .await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error updating subscription in Firestore", e)
             }
@@ -320,13 +363,15 @@ class InvoiceRepository(context: Context) {
         
         userStatsDao.insertUserStats(updatedStats.toEntity())
 
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
+                db.collection("users")
                     .document(user.uid)
                     .update("isSubscribed", false)
                     .await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error canceling subscription in Firestore", e)
             }
@@ -359,16 +404,18 @@ class InvoiceRepository(context: Context) {
         )
         userStatsDao.insertUserStats(updatedStats.toEntity())
 
-        if (isFirebaseReady) {
+        val db = firestoreDb
+        if (isFirebaseReady && db != null) {
             try {
-                FirebaseFirestore.getInstance()
-                    .collection("users")
+                db.collection("users")
                     .document(userId)
                     .update(
                         "totalInvoiced", total,
                         "invoiceCount", count
                     )
                     .await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("InvoiceRepository", "Error updating aggregate stats in Firestore", e)
             }

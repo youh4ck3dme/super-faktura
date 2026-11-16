@@ -312,7 +312,7 @@ fun ScanScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(56.dp)
-                                        .testTag("analyze_with_mistral_button"),
+                                        .testTag("analyze_with_ai_button"),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = MaterialTheme.colorScheme.primary,
                                         contentColor = MaterialTheme.colorScheme.onPrimary
@@ -325,12 +325,12 @@ fun ScanScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.AutoAwesome,
-                                            contentDescription = "Mistral",
+                                            contentDescription = "AI analýza",
                                             tint = MaterialTheme.colorScheme.onPrimary
                                         )
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Text(
-                                            text = "Extrahovať dáta s Mistral AI",
+                                            text = "Extrahovať dáta pomocou AI",
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                         )
                                     }
